@@ -1,5 +1,5 @@
 {
-  "name": "itsmob-rental-system",
+  "name": "locacar-rental-system",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -17,6 +17,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.22.1",
+    "serverless-http": "^3.2.0",
     "sqlite": "^5.1.1", 
     "sqlite3": "^5.1.7"
   },
