@@ -2,13 +2,17 @@ import express from 'express';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import cors from 'cors';
+import serverless from 'serverless-http';
 
+// Initialize express app
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Database setup
 let db;
 
 async function initializeDatabase() {
@@ -17,6 +21,7 @@ async function initializeDatabase() {
     driver: sqlite3.Database
   });
 
+  // Create tables if they don't exist
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,14 +47,16 @@ async function initializeDatabase() {
     );
   `);
 
+  // Check if admin user exists, create if not
   const adminExists = await db.get('SELECT * FROM users WHERE username = ?', ['admin']);
   if (!adminExists) {
     await db.run(
-        'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-        ['admin', 'admin123', 'admin']
+      'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+      ['admin', 'admin123', 'admin']
     );
   }
 
+  // Check if cars exist, populate with initial data if not
   const carsExist = await db.get('SELECT COUNT(*) as count FROM cars');
   if (carsExist.count === 0) {
     const initialCars = [
@@ -85,24 +92,26 @@ async function initializeDatabase() {
 
     for (const car of initialCars) {
       await db.run(
-          `INSERT INTO cars (
+        `INSERT INTO cars (
           tipo, classificacao, cambio, motorizacao, modelos, 
           curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            car.tipo, car.classificacao, car.cambio, car.motorizacao, car.modelos,
-            car.curtoPrazo, car.mensal1000, car.mensal2000, car.mensal3000, car.mensal4000, car.mensal5000, car.imageUrl
-          ]
+        [
+          car.tipo, car.classificacao, car.cambio, car.motorizacao, car.modelos,
+          car.curtoPrazo, car.mensal1000, car.mensal2000, car.mensal3000, car.mensal4000, car.mensal5000, car.imageUrl
+        ]
       );
     }
   }
 }
 
+// Routes
+// Authentication
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await db.get('SELECT * FROM users WHERE username = ? AND password = ?', [username, password]);
-
+    
     if (user) {
       res.json({ success: true, user: { id: user.id, username: user.username, role: user.role } });
     } else {
@@ -113,9 +122,10 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Search endpoints
 app.get('/api/search', async (req, res) => {
   try {
-    const {
+    const { 
       query,        // Busca geral (modelo, tipo, classificação)
       tipo,         // Tipo específico
       classificacao,// Classificação específica
@@ -173,10 +183,10 @@ app.get('/api/search', async (req, res) => {
     });
   } catch (error) {
     console.error('Search error:', error);
-    res.status(500).json({
-      success: false,
+    res.status(500).json({ 
+      success: false, 
       message: 'Erro ao realizar a busca',
-      error: error.message
+      error: error.message 
     });
   }
 });
@@ -218,7 +228,7 @@ app.get('/api/price-ranges', async (req, res) => {
       FROM cars
       WHERE ${period} != 'Sob Consulta'
     `);
-
+    
     res.json({
       success: true,
       range: {
@@ -262,14 +272,14 @@ app.post('/api/cars', async (req, res) => {
     } = req.body;
 
     const result = await db.run(
-        `INSERT INTO cars (
+      `INSERT INTO cars (
         tipo, classificacao, cambio, motorizacao, modelos, 
         curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          tipo, classificacao, cambio, motorizacao, modelos,
-          curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl
-        ]
+      [
+        tipo, classificacao, cambio, motorizacao, modelos,
+        curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl
+      ]
     );
 
     const newCar = await db.get('SELECT * FROM cars WHERE id = ?', [result.lastID]);
@@ -287,16 +297,16 @@ app.put('/api/cars/:id', async (req, res) => {
     } = req.body;
 
     await db.run(
-        `UPDATE cars SET 
+      `UPDATE cars SET 
         tipo = ?, classificacao = ?, cambio = ?, motorizacao = ?, modelos = ?,
         curtoPrazo = ?, mensal1000 = ?, mensal2000 = ?, mensal3000 = ?, 
         mensal4000 = ?, mensal5000 = ?, imageUrl = ?
       WHERE id = ?`,
-        [
-          tipo, classificacao, cambio, motorizacao, modelos,
-          curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl,
-          req.params.id
-        ]
+      [
+        tipo, classificacao, cambio, motorizacao, modelos,
+        curtoPrazo, mensal1000, mensal2000, mensal3000, mensal4000, mensal5000, imageUrl,
+        req.params.id
+      ]
     );
 
     const updatedCar = await db.get('SELECT * FROM cars WHERE id = ?', [req.params.id]);
@@ -336,13 +346,15 @@ app.get('/api/itsmob/cars', async (req, res) => {
   }
 });
 
-// Start server
-initializeDatabase()
-    .then(() => {
-      app.listen(PORT, () => {
-        console.log(`Servidor rodando na porta ${PORT}`);
-      });
-    })
-    .catch((err) => {
-      console.error('Erro ao inicializar o banco de dados:', err);
-    });
+// Initialize database and start server
+await initializeDatabase();
+
+// Export the serverless handler
+export default serverless(app);
+
+// Only start the server if we're not in a serverless environment
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+  });
+}
